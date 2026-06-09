@@ -803,7 +803,10 @@
     <div id="toast-alert" class="toast">Aviso del Sistema</div>
 
     <script>
-        // TEMAS DE COLORES ORIGINALES
+        // CONFIGURACIÓN CENTRAL DE LA NUBE (FIREBASE REST API)
+        // REEMPLAZA EL ENLACE DE ABAJO POR EL TUYO DE FIREBASE REALTIME DATABASE
+        const FIREBASE_URL = "https://pumpkin-fit-default-rtdb.firebaseio.com/";
+
         const temasColor = {
             pumpkin: { orange: "#E67E22", purple: "#4A235A", green: "#27AE60", yellow: "#F1C40F", dark: "#2C3E50", bg: "#FBFCFC", sidebar: "#1A1A24" },
             citric: { orange: "#2ECC71", purple: "#27AE60", green: "#16A085", yellow: "#F4D03F", dark: "#2C3E50", bg: "#F4F9F4", sidebar: "#0E2F1A" },
@@ -811,25 +814,20 @@
             cyber: { orange: "#FF007F", purple: "#9B59B6", green: "#00FFFF", yellow: "#FFFF00", dark: "#ECF0F1", bg: "#121216", sidebar: "#09090D" }
         };
 
-        // INVENTARIO INICIAL ADAPTADO A NUEVAS CATEGORÍAS
         let productosPorDefecto = [
             { id: 1, name: "Pumpkin Original", type: "dulces", price: 1.50, stock: 150, desc: "Gomitas premium ricas en fibra de calabaza natural y vitaminas.", img: "" },
             { id: 2, name: "Lemon Fit", type: "citricos", price: 1.20, stock: 90, desc: "Sabor cítrico de limón fresco purificante enriquecido con Vitamina C.", img: "" },
             { id: 3, name: "Passion Balance", type: "tropical", price: 1.80, stock: 75, desc: "Extracto tropical relajante de maracuyá libre de azúcares.", img: "" }
         ];
 
-        let reviewsPorDefecto = [
-            { cliente: "Andrés Gomez", stars: 5, comment: "¡La textura de las Pumpkin Original es una locura! No se siente para nada el cambio de azúcar.", fecha: "05/06/2026" },
-            { cliente: "FitMaria", stars: 4, comment: "Buenísimas las de limón para entrenar en las mañanas. Súper recomendado.", fecha: "07/06/2026" }
-        ];
-
         let headerPorDefecto = { title: "Pumpkin Fit - Tienda Oficial", desc: "Las mejores gomitas de calabaza, limón y maracuyá del mercado fitness.", color: "var(--pixel-orange)", sidebarName: "PumpkinFit", logo: "" };
 
-        // PERSISTENCIA
-        let productos = JSON.parse(localStorage.getItem('pf_productos')) || productosPorDefecto;
-        let headerData = JSON.parse(localStorage.getItem('pf_header')) || headerPorDefecto;
-        let historialVentas = JSON.parse(localStorage.getItem('pf_ventas')) || [];
-        let reviews = JSON.parse(localStorage.getItem('pf_reviews')) || reviewsPorDefecto;
+        // Variables de estado local sincronizadas
+        let productos = [];
+        let reviews = [];
+        let historialVentas = [];
+        let headerData = headerPorDefecto;
+        
         let tarjetaRegistrada = JSON.parse(localStorage.getItem('pf_tarjeta')) || null;
         let usuarioActual = JSON.parse(localStorage.getItem('pf_usuario')) || { nombre: "Invitado", email: "" };
         let adminPassword = localStorage.getItem('pf_admin_pass') || "456";
@@ -841,20 +839,67 @@
 
         window.onload = function() {
             injectThemeCSS(nombreTemaActual);
+            document.getElementById('admin-theme-select').value = nombreTemaActual;
+            
+            if(usuarioActual.nombre !== "Invitado") {
+                document.getElementById('login-username').value = usuarioActual.nombre;
+                document.getElementById('login-email').value = usuarioActual.email;
+                document.getElementById('user-display-status').innerText = `Usuario: ${usuarioActual.nombre}`;
+            }
+
+            // Descarga inicial desde la nube
+            loadAllDataFromCloud();
+        };
+
+        // FUNCIONES AUXILIARES DE CONEXIÓN A LA NUBE
+        async function cloudFetch(path) {
+            if(FIREBASE_URL === "TU_URL_DE_FIREBASE_AQUÍ") return null;
+            try {
+                let res = await fetch(`${FIREBASE_URL}/${path}.json`);
+                return await res.json();
+            } catch(e) { console.error(e); return null; }
+        }
+
+        async function cloudSave(path, data) {
+            if(FIREBASE_URL === "TU_URL_DE_FIREBASE_AQUÍ") return;
+            try {
+                await fetch(`${FIREBASE_URL}/${path}.json`, {
+                    method: 'PUT',
+                    body: JSON.stringify(data)
+                });
+            } catch(e) { console.error(e); }
+        }
+
+        async function loadAllDataFromCloud() {
+            // Cargar Catálogo
+            let cloudProds = await cloudFetch('productos');
+            if(cloudProds) {
+                productos = Object.values(cloudProds).filter(p => p !== null);
+            } else {
+                productos = productosPorDefecto;
+                await cloudSave('productos', productos);
+            }
+
+            // Cargar Reseñas
+            let cloudReviews = await cloudFetch('reviews');
+            reviews = cloudReviews ? Object.values(cloudReviews).filter(r => r !== null) : [];
+
+            // Cargar Ventas
+            let cloudVentas = await cloudFetch('ventas');
+            historialVentas = cloudVentas ? Object.values(cloudVentas).filter(v => v !== null) : [];
+
+            // Cargar Configuración de Marca
+            let cloudHeader = await cloudFetch('header');
+            headerData = cloudHeader || headerPorDefecto;
+
+            // Renderizar todo en pantalla
             applyHeaderDOM();
             renderMarketplace();
             populateAdminSelects();
             updateCartData();
             renderReviewsWall();
             updateAdminHistoryTable();
-            
-            document.getElementById('admin-theme-select').value = nombreTemaActual;
-            if(usuarioActual.nombre !== "Invitado") {
-                document.getElementById('login-username').value = usuarioActual.nombre;
-                document.getElementById('login-email').value = usuarioActual.email;
-                document.getElementById('user-display-status').innerText = `Usuario: ${usuarioActual.nombre}`;
-            }
-        };
+        }
 
         function injectThemeCSS(themeKey) {
             const t = temasColor[themeKey] || temasColor.pumpkin;
@@ -901,19 +946,17 @@
             const grid = document.getElementById('market-products-grid');
             grid.innerHTML = "";
             productos.forEach(prod => {
-                // Configuración de colores de etiquetas para las nuevas categorías
                 let badgeColor = 'var(--pixel-orange)';
                 if (prod.type === 'tropical') badgeColor = 'var(--pixel-purple)';
                 if (prod.type === 'citricos') badgeColor = 'var(--pixel-green)';
                 if (prod.type === 'dulces') badgeColor = 'var(--pixel-orange)';
 
-                let badgeTextColor = '#FFF';
                 let imageHTML = prod.img ? `<img src="${prod.img}">` : `<div class="no-img-placeholder">🍬 Muestra de<br>${prod.name}</div>`;
 
                 grid.innerHTML += `
                     <div class="product-card">
                         <div class="product-img-container">
-                            <span class="product-badge" style="background: ${badgeColor}; color: ${badgeTextColor};">${prod.type}</span>
+                            <span class="product-badge" style="background: ${badgeColor}; color: #FFF;">${prod.type}</span>
                             ${imageHTML}
                         </div>
                         <div class="product-info">
@@ -959,8 +1002,7 @@
             let prod = productos.find(p => p.id === id);
             
             if(prod) {
-                let precioLimpio = String(prod.price).replace(',', '.');
-                document.getElementById('admin-product-price').value = parseFloat(precioLimpio).toFixed(2);
+                document.getElementById('admin-product-price').value = Number(prod.price).toFixed(2);
                 document.getElementById('admin-product-stock').value = parseInt(prod.stock);
                 document.getElementById('admin-product-file').value = "";
             }
@@ -980,39 +1022,33 @@
             prod.stock = parseInt(stockInput);
 
             if(imgFile.files && imgFile.files[0]) {
-                const file = imgFile.files[0];
                 const reader = new FileReader();
-                
                 reader.onload = function(e) { 
                     const imgNode = new Image();
-                    imgNode.onload = function() {
+                    imgNode.onload = async function() {
                         const canvas = document.createElement('canvas');
                         const ctx = canvas.getContext('2d');
-                        
-                        let width = imgNode.width;
-                        let height = imgNode.height;
-                        if (width > 800) { height *= 800 / width; width = 800; }
-                        
-                        canvas.width = width;
-                        canvas.height = height;
+                        let width = imgNode.width; let height = imgNode.height;
+                        if (width > 400) { height *= 400 / width; width = 400; } // Optimizado para la nube
+                        canvas.width = width; canvas.height = height;
                         ctx.drawImage(imgNode, 0, 0, width, height);
                         
-                        prod.img = canvas.toDataURL('image/jpeg', 0.85); 
-                        finalizeProductUpdate(prod.name);
+                        prod.img = canvas.toDataURL('image/jpeg', 0.7); 
+                        await finalizeProductUpdate(prod.name);
                     };
                     imgNode.src = e.target.result;
                 };
-                reader.readAsDataURL(file);
+                reader.readAsDataURL(imgFile.files[0]);
             } else { 
                 finalizeProductUpdate(prod.name); 
             }
         }
 
-        function finalizeProductUpdate(name) {
-            localStorage.setItem('pf_productos', JSON.stringify(productos));
+        async function finalizeProductUpdate(name) {
+            await cloudSave('productos', productos);
             renderMarketplace(); 
             populateAdminSelects();
-            showToast(`✅ Inventario modificado con éxito: ${name}`);
+            showToast(`✅ Inventario modificado en la Nube: ${name}`);
         }
 
         function addNewProductFromAdmin() {
@@ -1039,18 +1075,16 @@
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     const imgNode = new Image();
-                    imgNode.onload = function() {
+                    imgNode.onload = async function() {
                         const canvas = document.createElement('canvas');
                         const ctx = canvas.getContext('2d');
-                        let width = imgNode.width;
-                        let height = imgNode.height;
-                        if (width > 800) { height *= 800 / width; width = 800; }
-                        canvas.width = width;
-                        canvas.height = height;
+                        let width = imgNode.width; let height = imgNode.height;
+                        if (width > 400) { height *= 400 / width; width = 400; }
+                        canvas.width = width; canvas.height = height;
                         ctx.drawImage(imgNode, 0, 0, width, height);
                         
-                        nuevoObjetoProducto.img = canvas.toDataURL('image/jpeg', 0.85);
-                        pushAndSaveProduct(nuevoObjetoProducto);
+                        nuevoObjetoProducto.img = canvas.toDataURL('image/jpeg', 0.7);
+                        await pushAndSaveProduct(nuevoObjetoProducto);
                     };
                     imgNode.src = e.target.result;
                 };
@@ -1060,9 +1094,9 @@
             }
         }
 
-        function pushAndSaveProduct(nuevoProd) {
+        async function pushAndSaveProduct(nuevoProd) {
             productos.push(nuevoProd);
-            localStorage.setItem('pf_productos', JSON.stringify(productos));
+            await cloudSave('productos', productos);
             
             document.getElementById('new-prod-name').value = "";
             document.getElementById('new-prod-desc').value = "";
@@ -1072,30 +1106,29 @@
             
             renderMarketplace();
             populateAdminSelects();
-            showToast(`📦 ¡${nuevoProd.name} lanzado al mercado!`);
+            showToast(`📦 ¡${nuevoProd.name} subido a la nube!`);
         }
 
-        function deleteProductFromAdmin() {
+        async function deleteProductFromAdmin() {
             if(!isAdminAuthed) return;
             let id = parseInt(document.getElementById('admin-delete-product-select').value);
-            if(!id) { showToast("❌ No hay productos seleccionados."); return; }
+            if(!id) return;
             
             let index = productos.findIndex(p => p.id === id);
             if(index !== -1) {
                 let name = productos[index].name;
                 productos.splice(index, 1);
-                localStorage.setItem('pf_productos', JSON.stringify(productos));
                 
+                await cloudSave('productos', productos);
                 carrito = carrito.filter(item => item.id !== id);
-                updateCartData();
                 
+                updateCartData();
                 renderMarketplace();
                 populateAdminSelects();
                 showToast(`🗑️ El producto "${name}" fue eliminado.`);
             }
         }
 
-        // FEEDBACK Y VALORACIONES
         function selectStarRating(val) {
             selectedRatingValue = val;
             const stars = document.querySelectorAll('#stars-selector-container .star-clickable');
@@ -1105,9 +1138,9 @@
             });
         }
 
-        function submitClientReview() {
+        async function submitClientReview() {
             let comentario = document.getElementById('review-comment').value.trim();
-            if(selectedRatingValue === 0 || !comentario) { showToast("❌ Por favor llena la puntuación y el comentario."); return; }
+            if(selectedRatingValue === 0 || !comentario) return;
 
             let nuevaResena = {
                 cliente: usuarioActual.nombre === "Invitado" ? "Cliente Anónimo" : usuarioActual.nombre,
@@ -1117,11 +1150,12 @@
             };
 
             reviews.unshift(nuevaResena);
-            localStorage.setItem('pf_reviews', JSON.stringify(reviews));
+            await cloudSave('reviews', reviews);
+            
             document.getElementById('review-comment').value = "";
             selectStarRating(0);
             renderReviewsWall();
-            showToast("⭐ ¡Gracias por tu valoración oficial!");
+            showToast("⭐ ¡Reseña enviada a la nube!");
         }
 
         function renderReviewsWall() {
@@ -1143,13 +1177,12 @@
             });
         }
 
-        // CARRITO Y LOGUEO
         function addToCart(productId) {
             const prod = productos.find(p => p.id === productId);
             if (!prod || prod.stock <= 0) return;
             const itemEnCarrito = carrito.find(item => item.id === productId);
             if (itemEnCarrito) {
-                if(itemEnCarrito.qty >= prod.stock) { showToast("No hay más existencias."); return; }
+                if(itemEnCarrito.qty >= prod.stock) return;
                 itemEnCarrito.qty++;
             } else { carrito.push({ ...prod, qty: 1 }); }
             showToast(`Añadido: ${prod.name}`);
@@ -1190,7 +1223,7 @@
         function saveLogin() {
             let name = document.getElementById('login-username').value.trim();
             let email = document.getElementById('login-email').value.trim();
-            if(!name) { showToast("Falta usuario"); return; }
+            if(!name) return;
             usuarioActual = { nombre: name, email: email || "Sin correo" };
             localStorage.setItem('pf_usuario', JSON.stringify(usuarioActual));
             document.getElementById('user-display-status').innerText = `Usuario: ${usuarioActual.nombre}`;
@@ -1200,28 +1233,28 @@
         function saveCard() {
             let titular = document.getElementById('card-name').value.trim();
             let numero = document.getElementById('card-number').value.trim();
-            if(!titular || numero.length < 12) { showToast("Datos incompletos."); return; }
+            if(!titular || numero.length < 12) return;
             tarjetaRegistrada = { titular, numero: numero.slice(-4) };
             localStorage.setItem('pf_tarjeta', JSON.stringify(tarjetaRegistrada));
             showToast("Tarjeta vinculada de forma segura.");
         }
 
-        function processCheckout() {
-            if (carrito.length === 0) { showToast("Carrito vacío."); return; }
-            if (!tarjetaRegistrada) { showToast("⚠️ Requieres registrar tarjeta."); return; }
+        async function processCheckout() {
+            if (carrito.length === 0 || !tarjetaRegistrada) return;
             
+            // Descontar inventario local y subirlo
             carrito.forEach(item => {
                 let pReal = productos.find(p => p.id === item.id);
                 if(pReal) pReal.stock -= item.qty;
             });
-            localStorage.setItem('pf_productos', JSON.stringify(productos));
+            await cloudSave('productos', productos);
             
             let totalFactura = carrito.reduce((acc, item) => acc + (item.price * item.qty), 0);
             let idFactura = "PMP-" + Math.floor(200000 + Math.random() * 700000);
             let detallesItems = carrito.map(i => `${i.name} (Cant: ${i.qty})`).join(', ');
 
             historialVentas.push({ id: idFactura, cliente: usuarioActual.nombre, items: detallesItems, total: totalFactura });
-            localStorage.setItem('pf_ventas', JSON.stringify(historialVentas));
+            await cloudSave('ventas', historialVentas);
 
             generateInvoiceHTML(idFactura, totalFactura);
             carrito = [];
@@ -1264,24 +1297,30 @@
             headerData.sidebarName = document.getElementById('admin-sidebar-name-input').value.trim();
             headerData.color = document.getElementById('admin-hdr-color').value;
             const logoFile = document.getElementById('admin-logo-file');
+            
             if(logoFile.files && logoFile.files[0]) {
                 const reader = new FileReader();
-                reader.onload = function(e) { headerData.logo = e.target.result; saveAndApplyHeader(); };
+                reader.onload = async function(e) { 
+                    headerData.logo = e.target.result; 
+                    await saveAndApplyHeader(); 
+                };
                 reader.readAsDataURL(logoFile.files[0]);
-            } else { saveAndApplyHeader(); }
+            } else { 
+                saveAndApplyHeader(); 
+            }
         }
 
-        function saveAndApplyHeader() {
-            localStorage.setItem('pf_header', JSON.stringify(headerData));
+        async function saveAndApplyHeader() {
+            await cloudSave('header', headerData);
             applyHeaderDOM();
-            showToast("¡Marca y encabezado actualizados!");
+            showToast("¡Marca y encabezado actualizados en la nube!");
         }
 
         function changeAdminPassword() {
             if(!isAdminAuthed) return;
             let oldPass = document.getElementById('admin-old-pass').value;
             let newPass = document.getElementById('admin-new-pass').value.trim();
-            if(oldPass !== adminPassword || !newPass) { showToast("❌ Datos erróneos."); return; }
+            if(oldPass !== adminPassword || !newPass) return;
             adminPassword = newPass;
             localStorage.setItem('pf_admin_pass', adminPassword);
             showToast("🔑 Contraseña cambiada.");
