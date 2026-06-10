@@ -536,7 +536,6 @@
             <button class="nav-btn" onclick="switchSection('carrito', this)">🛒 Carrito (<span id="cart-count-nav">0</span>)</button>
             <button class="nav-btn" onclick="switchSection('valoraciones', this)">⭐ Valoraciones</button>
             <button class="nav-btn" onclick="switchSection('perfil', this)">💳 Mi Cuenta</button>
-            <button class="nav-btn" onclick="switchSection('admin', this)">⚙️ Panel Admin</button>
         </nav>
 
         <div class="user-status" id="user-display-status">
@@ -1260,14 +1259,14 @@
         }
 
         function addToCart(productId) {
-            const prod = productos.find(p => p.id === productId);
-            if (!prod || prod.stock <= 0) return;
+            const pool = productos.find(p => p.id === productId);
+            if (!pool || pool.stock <= 0) return;
             const itemEnCarrito = carrito.find(item => item.id === productId);
             if (itemEnCarrito) {
-                if(itemEnCarrito.qty >= prod.stock) return;
+                if(itemEnCarrito.qty >= pool.stock) return;
                 itemEnCarrito.qty++;
-            } else { carrito.push({ ...prod, qty: 1 }); }
-            showToast(`Añadido: ${prod.name}`);
+            } else { carrito.push({ ...pool, qty: 1 }); }
+            showToast(`Añadido: ${pool.name}`);
             updateCartData();
         }
 
@@ -1426,6 +1425,25 @@
             toast.style.display = 'block';
             setTimeout(() => { toast.style.display = 'none'; }, 3000);
         }
+
+        // COMBINACIÓN SECRETA PARA REVELAR EL PANEL ADMIN (Presionar A + D + M al mismo tiempo)
+        let keysPressed = {};
+
+        document.addEventListener('keydown', (e) => {
+            keysPressed[e.key.toLowerCase()] = true;
+
+            if (keysPressed['a'] && keysPressed['d'] && keysPressed['m']) {
+                document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+                document.querySelectorAll('.app-section').forEach(sec => sec.classList.remove('active-section'));
+                
+                document.getElementById('admin').classList.add('active-section');
+                showToast("🔓 Consola de administración oculta invocada.");
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            delete keysPressed[e.key.toLowerCase()];
+        });
     </script>
 </body>
 </html>
